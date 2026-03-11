@@ -1781,4 +1781,661 @@ void main() {
       expect(code, contains('void onReset(ReducerCallback callback)'));
     });
   });
+
+  // =========================================================================
+  // 21. Inline product encoding (encodeExpr for ProductType not via Ref)
+  // =========================================================================
+  group('inline product encoding', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // Schema: a table with an inline Product field (not a Ref to the
+    // typespace). This triggers the ProductType case in encodeExpr.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U32': {}}},
+                {
+                  'name': 'coords',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'lat', 'algebraic_type': {'F64': {}}},
+                        {'name': 'lng', 'algebraic_type': {'F64': {}}},
+                      ]
+                    }
+                  }
+                },
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'place',
+          'product_type_ref': 0,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('inline product field encodes each sub-field', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/place.dart').readAsString();
+      // The inline product should encode each element via property access.
+      expect(code, contains('encoder.writeF64(coords.lat)'));
+      expect(code, contains('encoder.writeF64(coords.lng)'));
+    });
+  });
+
+  // =========================================================================
+  // 22. Inline product / sum decoding (decodeExpr fallback)
+  // =========================================================================
+  group('inline product and sum decoding', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // Table with an inline Product field to trigger the ProductType case in
+    // decodeExpr, and an inline Sum field to trigger the SumType case.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U32': {}}},
+                {
+                  'name': 'inline_prod',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'x', 'algebraic_type': {'U32': {}}},
+                      ]
+                    }
+                  }
+                },
+                {
+                  'name': 'inline_sum',
+                  'algebraic_type': {
+                    'Sum': {
+                      'variants': [
+                        {
+                          'name': 'a',
+                          'algebraic_type': {
+                            'Product': {
+                              'elements': [
+                                {'name': 'v', 'algebraic_type': {'U32': {}}}
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          'name': 'b',
+                          'algebraic_type': {
+                            'Product': {
+                              'elements': [
+                                {'name': 'w', 'algebraic_type': {'String': {}}}
+                              ]
+                            }
+                          }
+                        },
+                      ]
+                    }
+                  }
+                },
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'mixed',
+          'product_type_ref': 0,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('inline product field decodes as dynamic with comment', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/mixed.dart').readAsString();
+      expect(code, contains('dynamic /* inline product */'));
+    });
+
+    test('inline sum field decodes as dynamic with comment', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/mixed.dart').readAsString();
+      expect(code, contains('dynamic /* inline sum */'));
+    });
+
+    test('inline sum field encodes via writeBsatn', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/mixed.dart').readAsString();
+      // The SumType case in encodeExpr generates: varName.writeBsatn(encoder);
+      expect(code, contains('inlineSum.writeBsatn(encoder)'));
+    });
+  });
+
+  // =========================================================================
+  // 23. Table type validation error (productTypeRef points to SumType)
+  // =========================================================================
+  group('table type validation error', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // Schema where a table's productTypeRef points to a SumType instead of a
+    // ProductType. This should throw a StateError during generation.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          {
+            'Sum': {
+              'variants': [
+                {
+                  'name': 'variant_a',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'val', 'algebraic_type': {'U32': {}}}
+                      ]
+                    }
+                  }
+                },
+                {
+                  'name': 'variant_b',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'msg', 'algebraic_type': {'String': {}}}
+                      ]
+                    }
+                  }
+                },
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'bad_table',
+          'product_type_ref': 0,
+          'primary_key': null,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('throws StateError when table refs a non-ProductType', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      expect(
+        () => generator.generate(),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('not a ProductType'),
+        )),
+      );
+    });
+  });
+
+  // =========================================================================
+  // 24. Sum type variant with import to a custom type (line 630)
+  // =========================================================================
+  group('sum type variant importing custom type', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // A tagged union whose variant fields reference a custom product type.
+    // This triggers import generation at line 630 for sum type variants.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          // index 0: custom product type (inner struct)
+          {
+            'Product': {
+              'elements': [
+                {'name': 'x', 'algebraic_type': {'F64': {}}},
+                {'name': 'y', 'algebraic_type': {'F64': {}}},
+              ]
+            }
+          },
+          // index 1: tagged union with a variant referencing the custom product
+          {
+            'Sum': {
+              'variants': [
+                {
+                  'name': 'with_point',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'location', 'algebraic_type': {'Ref': 0}},
+                      ]
+                    }
+                  }
+                },
+                {
+                  'name': 'without_point',
+                  'algebraic_type': {
+                    'Product': {'elements': []}
+                  }
+                },
+              ]
+            }
+          },
+          // index 2: table product type referencing both custom types
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U64': {}}},
+                {'name': 'point', 'algebraic_type': {'Ref': 0}},
+                {'name': 'shape', 'algebraic_type': {'Ref': 1}},
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'geo',
+          'product_type_ref': 2,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('tagged union file imports custom product type', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/shape.dart').readAsString();
+      expect(code, contains("import 'point.dart';"));
+    });
+  });
+
+  // =========================================================================
+  // 25. Nullable field in sum type variant (line 695)
+  // =========================================================================
+  group('nullable field in sum type variant', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // A tagged union with a variant containing an Option field. This triggers
+    // the nullable (non-required) constructor parameter at line 695.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          // index 0: tagged union with an Option field in a variant
+          {
+            'Sum': {
+              'variants': [
+                {
+                  'name': 'partial',
+                  'algebraic_type': {
+                    'Product': {
+                      'elements': [
+                        {'name': 'label', 'algebraic_type': {'String': {}}},
+                        {
+                          'name': 'note',
+                          'algebraic_type': {
+                            'Sum': {
+                              'variants': [
+                                {
+                                  'name': 'some',
+                                  'algebraic_type': {'String': {}}
+                                },
+                                {
+                                  'name': 'none',
+                                  'algebraic_type': {
+                                    'Product': {'elements': []}
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                      ]
+                    }
+                  }
+                },
+              ]
+            }
+          },
+          // index 1: table product type
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U64': {}}},
+                {'name': 'entry', 'algebraic_type': {'Ref': 0}},
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'log',
+          'product_type_ref': 1,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('optional field in variant uses non-required constructor param',
+        () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/entry.dart').readAsString();
+      // The "note" field is Option<String>, so its constructor param should
+      // NOT be required.
+      expect(code, contains('this.note,'));
+      // The "label" field is required.
+      expect(code, contains('required this.label,'));
+    });
+  });
+
+  // =========================================================================
+  // 26. Custom product type with import and nullable field (lines 757, 777)
+  // =========================================================================
+  group('custom product type with import and nullable field', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // A custom product type that references another custom type AND has an
+    // Option field. Triggers lines 757 (import generation) and 777 (nullable
+    // constructor parameter).
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          // index 0: inner custom product
+          {
+            'Product': {
+              'elements': [
+                {'name': 'r', 'algebraic_type': {'U8': {}}},
+                {'name': 'g', 'algebraic_type': {'U8': {}}},
+                {'name': 'b', 'algebraic_type': {'U8': {}}},
+              ]
+            }
+          },
+          // index 1: outer custom product referencing index 0 + Option field
+          {
+            'Product': {
+              'elements': [
+                {'name': 'primary_color', 'algebraic_type': {'Ref': 0}},
+                {
+                  'name': 'accent_color',
+                  'algebraic_type': {
+                    'Sum': {
+                      'variants': [
+                        {
+                          'name': 'some',
+                          'algebraic_type': {'Ref': 0}
+                        },
+                        {
+                          'name': 'none',
+                          'algebraic_type': {
+                            'Product': {'elements': []}
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+              ]
+            }
+          },
+          // index 2: table referencing both
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U64': {}}},
+                {'name': 'color', 'algebraic_type': {'Ref': 0}},
+                {'name': 'theme', 'algebraic_type': {'Ref': 1}},
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'widget',
+          'product_type_ref': 2,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('custom product type file imports referenced custom type', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/theme.dart').readAsString();
+      expect(code, contains("import 'color.dart';"));
+    });
+
+    test('custom product type nullable field uses non-required param',
+        () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/theme.dart').readAsString();
+      // accentColor is Option<Color> → nullable, non-required.
+      expect(code, contains('this.accentColor,'));
+      // primaryColor is required.
+      expect(code, contains('required this.primaryColor,'));
+    });
+  });
+
+  // =========================================================================
+  // 27. Custom product type with exactly 1 field (hashCode single-field path)
+  // =========================================================================
+  group('custom product type with 1 field (hashCode)', () {
+    late String outDir;
+
+    setUp(() async => outDir = await _makeTmpDir());
+    tearDown(_cleanTmpDir);
+
+    // A custom product type with exactly one field. This triggers the
+    // single-field hashCode path at line 824.
+    final schema = _makeSchema({
+      'typespace': {
+        'types': [
+          // index 0: custom product with exactly 1 field
+          {
+            'Product': {
+              'elements': [
+                {'name': 'value', 'algebraic_type': {'String': {}}},
+              ]
+            }
+          },
+          // index 1: table referencing the custom product
+          {
+            'Product': {
+              'elements': [
+                {'name': 'id', 'algebraic_type': {'U64': {}}},
+                {'name': 'wrapper', 'algebraic_type': {'Ref': 0}},
+              ]
+            }
+          },
+        ]
+      },
+      'tables': [
+        {
+          'name': 'item',
+          'product_type_ref': 1,
+          'primary_key': 0,
+          'indexes': [],
+          'constraints': [],
+          'schedule': null,
+          'table_type': 'User',
+          'table_access': 'Public',
+        }
+      ],
+      'reducers': [],
+    });
+
+    test('1-field custom product uses field.hashCode', () async {
+      final generator = DartGenerator(schema: schema, outputDir: outDir);
+      await generator.generate();
+
+      final code = await File('$outDir/types/wrapper.dart').readAsString();
+      expect(code, contains('int get hashCode => value.hashCode;'));
+      expect(code, isNot(contains('Object.hash')));
+    });
+  });
+
+  // =========================================================================
+  // 28. Custom product type with 0 fields (hashCode and toString edge cases)
+  //     Lines 817, 834: tested via @visibleForTesting generateCustomProductCode
+  // =========================================================================
+  group('custom product type with 0 fields (generateCustomProductCode)', () {
+    // Since _resolveTypeNames skips empty product types for _customProductTypeRefs,
+    // we test generateCustomProductCode directly.
+
+    test('0-field custom product hashCode returns 0', () async {
+      final tmp = await Directory.systemTemp.createTemp('empty_cp_test_');
+      try {
+        // Create a minimal schema just to have a valid generator.
+        final schema = _makeSchema({
+          'typespace': {
+            'types': [
+              {
+                'Product': {
+                  'elements': [
+                    {'name': 'id', 'algebraic_type': {'U32': {}}}
+                  ]
+                }
+              },
+            ]
+          },
+          'tables': [
+            {
+              'name': 'dummy',
+              'product_type_ref': 0,
+              'primary_key': 0,
+              'indexes': [],
+              'constraints': [],
+              'schedule': null,
+              'table_type': 'User',
+              'table_access': 'Public',
+            }
+          ],
+          'reducers': [],
+        });
+
+        final generator =
+            DartGenerator(schema: schema, outputDir: tmp.path);
+        await generator.generate(); // Populate internal state.
+
+        final code = generator.generateCustomProductCode(
+            'EmptyStruct', const ProductType(elements: []));
+        expect(code, contains('int get hashCode => 0;'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('0-field custom product toString returns ClassName()', () async {
+      final tmp = await Directory.systemTemp.createTemp('empty_cp_test_');
+      try {
+        final schema = _makeSchema({
+          'typespace': {
+            'types': [
+              {
+                'Product': {
+                  'elements': [
+                    {'name': 'id', 'algebraic_type': {'U32': {}}}
+                  ]
+                }
+              },
+            ]
+          },
+          'tables': [
+            {
+              'name': 'dummy',
+              'product_type_ref': 0,
+              'primary_key': 0,
+              'indexes': [],
+              'constraints': [],
+              'schedule': null,
+              'table_type': 'User',
+              'table_access': 'Public',
+            }
+          ],
+          'reducers': [],
+        });
+
+        final generator =
+            DartGenerator(schema: schema, outputDir: tmp.path);
+        await generator.generate();
+
+        final code = generator.generateCustomProductCode(
+            'EmptyStruct', const ProductType(elements: []));
+        expect(code, contains("String toString() => 'EmptyStruct()';"));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
 }

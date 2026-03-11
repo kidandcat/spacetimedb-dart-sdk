@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:spacetimedb_sdk/spacetimedb.dart';
@@ -1380,6 +1381,51 @@ void main() {
         () => ServerMessage.decode(raw),
         throwsA(isA<UnsupportedError>()),
       );
+    });
+
+    test('gzip compression tag decodes correctly', () {
+      // Build a valid IdentityToken BSATN payload (without compression prefix)
+      final enc = BsatnEncoder();
+      enc.writeSumTag(3); // IdentityToken tag
+
+      // identity: 32 raw bytes
+      final identityBytes = Uint8List(32);
+      for (var i = 0; i < 32; i++) {
+        identityBytes[i] = i;
+      }
+      enc.writeRawBytes(identityBytes);
+
+      // token: string
+      enc.writeString('gzip_test_token');
+
+      // connectionId: 16 raw bytes
+      final connIdBytes = Uint8List(16);
+      for (var i = 0; i < 16; i++) {
+        connIdBytes[i] = i + 50;
+      }
+      enc.writeRawBytes(connIdBytes);
+
+      final payload = enc.toBytes();
+
+      // Gzip-compress the payload
+      final compressed = gzip.encode(payload);
+
+      // Prepend compression tag 2 (gzip)
+      final raw = Uint8List(1 + compressed.length);
+      raw[0] = 2;
+      raw.setRange(1, raw.length, compressed);
+
+      final msg = ServerMessage.decode(raw);
+      expect(msg, isA<IdentityToken>());
+
+      final token = msg as IdentityToken;
+      expect(token.token, 'gzip_test_token');
+      for (var i = 0; i < 32; i++) {
+        expect(token.identity.data[i], i);
+      }
+      for (var i = 0; i < 16; i++) {
+        expect(token.connectionId.data[i], i + 50);
+      }
     });
 
     test('unknown compression tag throws BsatnDecodeException', () {

@@ -395,6 +395,66 @@ void main() {
     });
   });
 
+  group('BsatnDecodeException', () {
+    test('toString returns formatted message', () {
+      final ex = BsatnDecodeException('something went wrong');
+      expect(ex.toString(), 'BsatnDecodeException: something went wrong');
+    });
+
+    test('toString with empty message', () {
+      final ex = BsatnDecodeException('');
+      expect(ex.toString(), 'BsatnDecodeException: ');
+    });
+  });
+
+  group('BsatnDecoder properties', () {
+    test('offset starts at zero', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1, 2, 3]));
+      expect(dec.offset, 0);
+    });
+
+    test('offset advances after reads', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1, 2, 3, 4, 5]));
+      dec.readU8();
+      expect(dec.offset, 1);
+      dec.readU8();
+      expect(dec.offset, 2);
+    });
+
+    test('length returns total buffer size', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1, 2, 3]));
+      expect(dec.length, 3);
+    });
+
+    test('length returns zero for empty buffer', () {
+      final dec = BsatnDecoder(Uint8List(0));
+      expect(dec.length, 0);
+    });
+
+    test('length does not change after reads', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1, 2, 3]));
+      dec.readU8();
+      expect(dec.length, 3);
+    });
+
+    test('isEmpty is true for empty buffer', () {
+      final dec = BsatnDecoder(Uint8List(0));
+      expect(dec.isEmpty, true);
+    });
+
+    test('isEmpty is false when bytes remain', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1, 2]));
+      expect(dec.isEmpty, false);
+    });
+
+    test('isEmpty becomes true after reading all bytes', () {
+      final dec = BsatnDecoder(Uint8List.fromList([1]));
+      expect(dec.isEmpty, false);
+      dec.readU8();
+      expect(dec.isEmpty, true);
+    });
+  });
+
   group('BsatnDecoder error cases', () {
     test('read past end throws', () {
       final dec = BsatnDecoder(Uint8List(0));

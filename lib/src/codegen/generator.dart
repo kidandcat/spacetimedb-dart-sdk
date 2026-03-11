@@ -5,6 +5,8 @@
 
 import 'dart:io';
 
+import 'package:meta/meta.dart';
+
 import 'schema.dart';
 
 /// Header comment prepended to every generated file.
@@ -575,7 +577,7 @@ class DartGenerator {
     for (final refIdx in _customProductTypeRefs) {
       final type = schema.typespace[refIdx].type as ProductType;
       final name = _typeNames[refIdx]!;
-      final code = _generateCustomProductCode(name, type);
+      final code = generateCustomProductCode(name, type);
       final fileName = _toSnakeCase(name);
       await File('${typesDir.path}/$fileName.dart').writeAsString(code);
     }
@@ -746,7 +748,8 @@ class DartGenerator {
   }
 
   /// Generates code for a standalone product type (struct not used as a table).
-  String _generateCustomProductCode(String name, ProductType type) {
+  @visibleForTesting
+  String generateCustomProductCode(String name, ProductType type) {
     final buf = StringBuffer();
     buf.writeln(_generatedHeader);
     buf.writeln("import 'package:spacetimedb_sdk/spacetimedb.dart';");
