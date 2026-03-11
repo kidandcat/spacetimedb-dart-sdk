@@ -1,0 +1,18 @@
+name: spacetimedb_sdk
+description: A Dart SDK for SpacetimeDB - the database that is also a server.
+version: 0.1.0
+repository: https://github.com/kidandcat/spacetimedb-dart-sdk
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  web_socket_channel: ^3.0.3
+  meta: ^1.11.0
+  collection: ^1.18.0
+  args: ^2.4.0
+  http: ^1.2.0
+
+dev_dependencies:
+  test: ^1.24.0
+  lints: ^5.0.0
