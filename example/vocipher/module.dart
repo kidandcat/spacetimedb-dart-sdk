@@ -7,6 +7,8 @@ export 'types/message.dart';
 export 'types/server.dart';
 export 'types/server_member.dart';
 export 'types/user.dart';
+export 'types/user_roles.dart';
+export 'types/user_settings.dart';
 export 'types/voice_state.dart';
 
 // Custom types
@@ -19,6 +21,8 @@ export 'tables/message_table.dart';
 export 'tables/server_table.dart';
 export 'tables/server_member_table.dart';
 export 'tables/user_table.dart';
+export 'tables/user_roles_table.dart';
+export 'tables/user_settings_table.dart';
 export 'tables/voice_state_table.dart';
 
 // Reducers

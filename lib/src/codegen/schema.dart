@@ -129,9 +129,14 @@ sealed class AlgebraicType {
     if (json.containsKey('String')) return const StringType();
 
     if (json.containsKey('Array')) {
-      final arrayJson = json['Array'] as Map<String, dynamic>;
-      final elemTy =
-          AlgebraicType.fromJson(arrayJson['elem_ty'] as Map<String, dynamic>);
+      final arrayValue = json['Array'] as Map<String, dynamic>;
+      // Support both formats:
+      // New (real server): {"Array": {"String": []}} - element type directly
+      // Old (legacy):      {"Array": {"elem_ty": {"String": {}}}} - nested under elem_ty
+      final elemJson = arrayValue.containsKey('elem_ty')
+          ? arrayValue['elem_ty'] as Map<String, dynamic>
+          : arrayValue;
+      final elemTy = AlgebraicType.fromJson(elemJson);
       return ArrayType(elementType: elemTy);
     }
 

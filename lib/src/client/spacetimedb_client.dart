@@ -348,12 +348,20 @@ class SpacetimeDbClient {
         _handleInitialSubscription(msg);
       case TransactionUpdate():
         _handleTransactionUpdate(msg);
+      case TransactionUpdateLight():
+        _handleTransactionUpdateLight(msg);
       case UnsubscribeApplied():
         _handleUnsubscribeApplied(msg);
       case SubscriptionError():
         _handleSubscriptionError(msg);
       case OneOffQueryResponse():
         _handleOneOffQueryResponse(msg);
+      case SubscribeMultiApplied():
+        _handleSubscribeMultiApplied(msg);
+      case UnsubscribeMultiApplied():
+        _handleUnsubscribeMultiApplied(msg);
+      case ProcedureResult():
+        _handleProcedureResult(msg);
     }
   }
 
@@ -459,10 +467,59 @@ class SpacetimeDbClient {
     final hex = _bytesToHex(msg.messageId);
     final completer = _pendingOneOffQueries.remove(hex);
     if (completer != null) {
-      if (msg.error.isNotEmpty) {
+      if (msg.isError) {
         completer.completeError(Exception(msg.error));
       } else {
         completer.complete(msg);
+      }
+    }
+  }
+
+  void _handleTransactionUpdateLight(TransactionUpdateLight msg) {
+    _applyDatabaseUpdate(msg.update);
+
+    // Resolve the pending reducer call future if any.
+    final completer = _pendingReducerCalls.remove(msg.requestId);
+    completer?.complete();
+  }
+
+  void _handleSubscribeMultiApplied(SubscribeMultiApplied msg) {
+    _applyDatabaseUpdate(msg.update);
+
+    final handle = _subscriptionsByRequestId[msg.requestId];
+    if (handle != null) {
+      if (!_activeSubscriptions.contains(handle)) {
+        _activeSubscriptions.add(handle);
+      }
+      handle.markApplied();
+    }
+    _eventController.add(SubscriptionAppliedEvent(msg.queryId));
+  }
+
+  void _handleUnsubscribeMultiApplied(UnsubscribeMultiApplied msg) {
+    final handle = _subscriptionsByRequestId.remove(msg.requestId);
+    if (handle != null) {
+      _activeSubscriptions.remove(handle);
+      _subscriptionsByQueryId.remove(handle.queryId);
+      handle.markEnded();
+    }
+  }
+
+  void _handleProcedureResult(ProcedureResult msg) {
+    if (msg.status is ProcedureCommitted) {
+      final committed = msg.status as ProcedureCommitted;
+      _applyDatabaseUpdate(committed.databaseUpdate);
+    }
+
+    // Resolve the pending reducer/procedure call future.
+    final completer = _pendingReducerCalls.remove(msg.requestId);
+    if (completer != null) {
+      if (msg.status is ProcedureCommitted) {
+        completer.complete();
+      } else if (msg.status is ProcedureFailed) {
+        completer.completeError(
+          Exception((msg.status as ProcedureFailed).errorMessage),
+        );
       }
     }
   }

@@ -164,46 +164,52 @@ class Token {
   String toString() => 'Token(${value.length > 10 ? '${value.substring(0, 10)}...' : value})';
 }
 
-/// SpacetimeDB timestamp (microseconds since Unix epoch).
+/// SpacetimeDB timestamp (nanoseconds since Unix epoch).
 ///
 /// Timestamps are serialized as a signed 64-bit integer (i64) in BSATN,
-/// representing microseconds since the Unix epoch.
+/// representing nanoseconds since the Unix epoch.
 class Timestamp {
-  /// Microseconds since Unix epoch (can be negative for dates before 1970).
-  final int microsecondsSinceEpoch;
+  /// Nanoseconds since Unix epoch (can be negative for dates before 1970).
+  final int nanosecondsSinceEpoch;
 
-  Timestamp(this.microsecondsSinceEpoch);
+  Timestamp(this.nanosecondsSinceEpoch);
 
   /// Creates a [Timestamp] representing the current time.
   factory Timestamp.now() =>
-      Timestamp(DateTime.now().microsecondsSinceEpoch);
+      Timestamp(DateTime.now().microsecondsSinceEpoch * 1000);
 
   /// Creates a [Timestamp] from a [DateTime].
   factory Timestamp.fromDateTime(DateTime dt) =>
-      Timestamp(dt.microsecondsSinceEpoch);
+      Timestamp(dt.microsecondsSinceEpoch * 1000);
 
   /// Converts this timestamp to a [DateTime].
+  ///
+  /// Note: Dart's DateTime only has microsecond precision, so the sub-microsecond
+  /// portion of the nanosecond timestamp is truncated.
   DateTime toDateTime() =>
-      DateTime.fromMicrosecondsSinceEpoch(microsecondsSinceEpoch);
+      DateTime.fromMicrosecondsSinceEpoch(nanosecondsSinceEpoch ~/ 1000);
 
-  /// Writes this timestamp to a BSATN encoder as an i64.
+  /// Returns the timestamp as microseconds since epoch (lossy conversion).
+  int get microsecondsSinceEpoch => nanosecondsSinceEpoch ~/ 1000;
+
+  /// Writes this timestamp to a BSATN encoder as an i64 (nanoseconds).
   void writeBsatn(BsatnEncoder encoder) =>
-      encoder.writeI64(microsecondsSinceEpoch);
+      encoder.writeI64(nanosecondsSinceEpoch);
 
-  /// Reads a timestamp from a BSATN decoder (i64).
+  /// Reads a timestamp from a BSATN decoder (i64 nanoseconds).
   static Timestamp readBsatn(BsatnDecoder decoder) =>
       Timestamp(decoder.readI64());
 
   @override
   bool operator ==(Object other) =>
       other is Timestamp &&
-      microsecondsSinceEpoch == other.microsecondsSinceEpoch;
+      nanosecondsSinceEpoch == other.nanosecondsSinceEpoch;
 
   @override
-  int get hashCode => microsecondsSinceEpoch.hashCode;
+  int get hashCode => nanosecondsSinceEpoch.hashCode;
 
   @override
-  String toString() => 'Timestamp($microsecondsSinceEpoch)';
+  String toString() => 'Timestamp($nanosecondsSinceEpoch ns)';
 }
 
 /// Compares two byte arrays for element-wise equality.

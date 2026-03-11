@@ -8,7 +8,6 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:spacetimedb_sdk/spacetimedb.dart';
@@ -166,7 +165,7 @@ void main() {
       expect(myUser.first.data['username'], testUsername);
     });
 
-    test('one-off query works', skip: 'OneOffQuery response parsing needs investigation', () async {
+    test('one-off query works', () async {
       final identityCompleter = Completer<void>();
 
       client.onIdentityReceived = (_, __, ___) {
@@ -225,6 +224,213 @@ void main() {
       client2.dispose();
     });
 
+    test('Option fields: update_settings with nullable values', () async {
+      final identityCompleter = Completer<void>();
+      final subApplied = Completer<void>();
+
+      // Register user_settings cache using the generated type decoder.
+      final settingsCache = TableCache<_SimpleRow>(
+        tableName: 'user_settings',
+        decoder: (decoder) {
+          final id = decoder.readU64();
+          final ownerIdentity = Identity.readBsatn(decoder);
+          final theme = decoder.readOption() ? decoder.readString() : null;
+          final language = decoder.readOption() ? decoder.readString() : null;
+          final notificationsEnabled = decoder.readBool();
+          final customStatusEmoji =
+              decoder.readOption() ? decoder.readString() : null;
+          return _SimpleRow(pk: id, data: {
+            'id': id,
+            'ownerIdentity': ownerIdentity,
+            'theme': theme,
+            'language': language,
+            'notificationsEnabled': notificationsEnabled,
+            'customStatusEmoji': customStatusEmoji,
+          });
+        },
+        pkExtractor: (row) => row.pk,
+      );
+      client.registerTableCache(settingsCache);
+
+      client.onIdentityReceived = (_, __, ___) {
+        if (!identityCompleter.isCompleted) identityCompleter.complete();
+      };
+
+      await client.connect();
+      await identityCompleter.future.timeout(const Duration(seconds: 5));
+
+      final handle = client.subscribe(['SELECT * FROM user_settings']);
+      handle.onApplied(() {
+        if (!subApplied.isCompleted) subApplied.complete();
+      });
+      await subApplied.future.timeout(const Duration(seconds: 10));
+
+      // Call update_settings with some null and non-null Option fields.
+      final encoder = BsatnEncoder();
+      // theme = Some("dark")
+      encoder.writeOptionSome();
+      encoder.writeString('dark');
+      // language = None
+      encoder.writeOptionNone();
+      // notifications = true
+      encoder.writeBool(true);
+      // emoji = Some("🔥")
+      encoder.writeOptionSome();
+      encoder.writeString('🔥');
+
+      await client
+          .callReducer('update_settings', encoder.toBytes())
+          .timeout(const Duration(seconds: 10));
+
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      // Find settings for our identity.
+      final mySettings = settingsCache.rows.where(
+        (row) => row.data['ownerIdentity'] == client.identity,
+      );
+      expect(mySettings, isNotEmpty);
+      final settings = mySettings.first;
+      expect(settings.data['theme'], 'dark');
+      expect(settings.data['language'], isNull);
+      expect(settings.data['notificationsEnabled'], isTrue);
+      expect(settings.data['customStatusEmoji'], '🔥');
+    });
+
+    test('Vec fields: set_roles with array values', () async {
+      final identityCompleter = Completer<void>();
+      final subApplied = Completer<void>();
+
+      final rolesCache = TableCache<_SimpleRow>(
+        tableName: 'user_roles',
+        decoder: (decoder) {
+          final identity = Identity.readBsatn(decoder);
+          final serverId = decoder.readU64();
+          final roleCount = decoder.readArrayHeader();
+          final roleNames = <String>[];
+          for (var i = 0; i < roleCount; i++) {
+            roleNames.add(decoder.readString());
+          }
+          final permCount = decoder.readArrayHeader();
+          final permissions = <int>[];
+          for (var i = 0; i < permCount; i++) {
+            permissions.add(decoder.readU32());
+          }
+          return _SimpleRow(pk: identity, data: {
+            'identity': identity,
+            'serverId': serverId,
+            'roleNames': roleNames,
+            'permissions': permissions,
+          });
+        },
+        pkExtractor: (row) => row.pk,
+      );
+      client.registerTableCache(rolesCache);
+
+      client.onIdentityReceived = (_, __, ___) {
+        if (!identityCompleter.isCompleted) identityCompleter.complete();
+      };
+
+      await client.connect();
+      await identityCompleter.future.timeout(const Duration(seconds: 5));
+
+      final handle = client.subscribe(['SELECT * FROM user_roles']);
+      handle.onApplied(() {
+        if (!subApplied.isCompleted) subApplied.complete();
+      });
+      await subApplied.future.timeout(const Duration(seconds: 10));
+
+      // Call set_roles reducer with Vec<String> and Vec<u32>.
+      final encoder = BsatnEncoder();
+      encoder.writeU64(1); // server_id
+      encoder.writeArrayHeader(2); // roleNames
+      encoder.writeString('admin');
+      encoder.writeString('moderator');
+      encoder.writeArrayHeader(3); // permissions
+      encoder.writeU32(1);
+      encoder.writeU32(2);
+      encoder.writeU32(4);
+
+      await client
+          .callReducer('set_roles', encoder.toBytes())
+          .timeout(const Duration(seconds: 10));
+
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      final myRoles = rolesCache.rows.where(
+        (row) => row.data['identity'] == client.identity,
+      );
+      expect(myRoles, isNotEmpty);
+      final roles = myRoles.first;
+      expect(roles.data['roleNames'], ['admin', 'moderator']);
+      expect(roles.data['permissions'], [1, 2, 4]);
+    });
+
+    test('reducer callback fires on success', () async {
+      final identityCompleter = Completer<void>();
+      final callbackFired = Completer<ReducerCallbackEvent>();
+
+      client.onIdentityReceived = (_, __, ___) {
+        if (!identityCompleter.isCompleted) identityCompleter.complete();
+      };
+
+      client.onReducer('set_username', (event) {
+        if (!callbackFired.isCompleted) {
+          callbackFired.complete(event);
+        }
+      });
+
+      await client.connect();
+      await identityCompleter.future.timeout(const Duration(seconds: 5));
+
+      final testUsername =
+          'cb_test_${DateTime.now().millisecondsSinceEpoch}';
+      final encoder = BsatnEncoder();
+      encoder.writeString(testUsername);
+      await client
+          .callReducer('set_username', encoder.toBytes())
+          .timeout(const Duration(seconds: 10));
+
+      final event =
+          await callbackFired.future.timeout(const Duration(seconds: 5));
+
+      expect(event.reducerName, 'set_username');
+      expect(event.status, isA<Committed>());
+      expect(event.callerIdentity, client.identity);
+    });
+
+    test('one-off query on user_settings with Option fields', () async {
+      final identityCompleter = Completer<void>();
+
+      client.onIdentityReceived = (_, __, ___) {
+        if (!identityCompleter.isCompleted) identityCompleter.complete();
+      };
+
+      await client.connect();
+      await identityCompleter.future.timeout(const Duration(seconds: 5));
+
+      final response = await client
+          .oneOffQuery('SELECT * FROM user_settings')
+          .timeout(const Duration(seconds: 10));
+
+      expect(response.isSuccess, isTrue);
+      expect(response.tables, isNotEmpty);
+      expect(response.tables.first.tableName, 'user_settings');
+
+      // Decode the rows using the generated decoder.
+      for (final rowBytes in response.tables.first.rows) {
+        final decoder = BsatnDecoder(rowBytes);
+        final id = decoder.readU64();
+        final ownerIdentity = Identity.readBsatn(decoder);
+        if (decoder.readOption()) decoder.readString(); // theme
+        if (decoder.readOption()) decoder.readString(); // language
+        decoder.readBool(); // notificationsEnabled
+        if (decoder.readOption()) decoder.readString(); // customStatusEmoji
+        // Just verify it decodes without error.
+        expect(id, isA<int>());
+        expect(ownerIdentity.isZero, isFalse);
+      }
+    });
+
     test('subscribe to multiple tables', () async {
       final identityCompleter = Completer<void>();
       int subscriptionsApplied = 0;
@@ -236,9 +442,9 @@ void main() {
         decoder: (decoder) {
           final id = decoder.readU64();
           final name = decoder.readString();
-          final ownerIdentity = Identity.readBsatn(decoder);
-          final iconUrl = decoder.readString();
-          final createdAt = Timestamp.readBsatn(decoder);
+          Identity.readBsatn(decoder); // ownerIdentity
+          decoder.readString(); // iconUrl
+          Timestamp.readBsatn(decoder); // createdAt
           return _SimpleRow(pk: id, data: {'id': id, 'name': name});
         },
         pkExtractor: (row) => row.pk,
@@ -248,11 +454,11 @@ void main() {
         tableName: 'channel',
         decoder: (decoder) {
           final id = decoder.readU64();
-          final serverId = decoder.readU64();
+          decoder.readU64(); // serverId
           final name = decoder.readString();
-          final channelType = decoder.readSumTag(); // ChannelType enum
-          final topic = decoder.readString();
-          final position = decoder.readU32();
+          decoder.readSumTag(); // channelType enum
+          decoder.readString(); // topic
+          decoder.readU32(); // position
           return _SimpleRow(pk: id, data: {'id': id, 'name': name});
         },
         pkExtractor: (row) => row.pk,

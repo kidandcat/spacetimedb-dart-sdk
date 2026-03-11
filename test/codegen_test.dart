@@ -14,7 +14,7 @@ const _testSchemaJson = '''
       {
         "Product": {
           "elements": [
-            {"name": "__identity_bytes", "algebraic_type": {"Array": {"elem_ty": {"U8": {}}}}}
+            {"name": "__identity_bytes", "algebraic_type": {"Array": {"U8": []}}}
           ]
         }
       },
@@ -34,7 +34,7 @@ const _testSchemaJson = '''
             {"name": "name", "algebraic_type": {"String": {}}},
             {"name": "icon_url", "algebraic_type": {"Sum": {"variants": [{"name": "some", "algebraic_type": {"String": {}}}, {"name": "none", "algebraic_type": {"Product": {"elements": []}}}]}}},
             {"name": "channel_type", "algebraic_type": {"Ref": 1}},
-            {"name": "tags", "algebraic_type": {"Array": {"elem_ty": {"String": {}}}}},
+            {"name": "tags", "algebraic_type": {"Array": {"String": []}}},
             {"name": "member_count", "algebraic_type": {"U32": {}}}
           ]
         }
@@ -42,7 +42,7 @@ const _testSchemaJson = '''
       {
         "Product": {
           "elements": [
-            {"name": "__identity_bytes", "algebraic_type": {"Array": {"elem_ty": {"U8": {}}}}}
+            {"name": "__identity_bytes", "algebraic_type": {"Array": {"U8": []}}}
           ]
         }
       },
@@ -260,6 +260,14 @@ void main() {
 
     test('parses Array type', () {
       final type = AlgebraicType.fromJson({
+        'Array': {'String': []}
+      });
+      expect(type, isA<ArrayType>());
+      expect((type as ArrayType).elementType, isA<StringType>());
+    });
+
+    test('parses Array type with legacy elem_ty format', () {
+      final type = AlgebraicType.fromJson({
         'Array': {
           'elem_ty': {'String': {}}
         }
@@ -288,9 +296,7 @@ void main() {
             {
               'name': '__identity_bytes',
               'algebraic_type': {
-                'Array': {
-                  'elem_ty': {'U8': {}}
-                }
+                'Array': {'U8': []}
               }
             }
           ]

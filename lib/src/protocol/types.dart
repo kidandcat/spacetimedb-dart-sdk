@@ -3,6 +3,35 @@ import 'dart:typed_data';
 
 import '../bsatn/bsatn.dart';
 
+/// A duration of time, serialized as i64 nanoseconds in BSATN.
+class TimeDuration {
+  /// Duration in nanoseconds.
+  final int nanoseconds;
+
+  const TimeDuration(this.nanoseconds);
+
+  /// Creates a zero duration.
+  factory TimeDuration.zero() => const TimeDuration(0);
+
+  /// Creates a [TimeDuration] from a Dart [Duration].
+  factory TimeDuration.fromDuration(Duration d) =>
+      TimeDuration(d.inMicroseconds * 1000);
+
+  /// Converts to a Dart [Duration] (truncated to microsecond precision).
+  Duration toDuration() => Duration(microseconds: nanoseconds ~/ 1000);
+
+  /// Returns the duration in microseconds (lossy conversion).
+  int get microseconds => nanoseconds ~/ 1000;
+
+  void writeBsatn(BsatnEncoder encoder) => encoder.writeI64(nanoseconds);
+
+  static TimeDuration readBsatn(BsatnDecoder decoder) =>
+      TimeDuration(decoder.readI64());
+
+  @override
+  String toString() => 'TimeDuration(${nanoseconds}ns)';
+}
+
 /// Energy quanta consumed by an operation (U128, 16 LE bytes).
 class EnergyQuanta {
   final U128 quanta;
@@ -430,30 +459,73 @@ class SubscribeRows {
 }
 
 /// A table result from a one-off query.
+///
+/// Rust definition:
+/// ```
+/// pub table_name: RawIdentifier,
+/// pub rows: BsatnRowList,
+/// ```
 class OneOffTable {
   final String tableName;
-  final List<Uint8List> rows;
+  final BsatnRowList rowList;
 
-  const OneOffTable({required this.tableName, required this.rows});
+  const OneOffTable({required this.tableName, required this.rowList});
+
+  /// Extracts individual rows from the packed row list.
+  List<Uint8List> get rows => rowList.extractRows();
 
   static OneOffTable readBsatn(BsatnDecoder decoder) {
     final tableName = decoder.readString();
-    final rowCount = decoder.readArrayHeader();
-    final rows = <Uint8List>[];
-    for (var i = 0; i < rowCount; i++) {
-      rows.add(decoder.readBytes());
-    }
-    return OneOffTable(tableName: tableName, rows: rows);
+    final rowList = BsatnRowList.readBsatn(decoder);
+    return OneOffTable(tableName: tableName, rowList: rowList);
   }
 
   void writeBsatn(BsatnEncoder encoder) {
     encoder.writeString(tableName);
-    encoder.writeArrayHeader(rows.length);
-    for (final row in rows) {
-      encoder.writeBytes(row);
-    }
+    rowList.writeBsatn(encoder);
   }
 
   @override
   String toString() => 'OneOffTable(name: $tableName, ${rows.length} rows)';
+}
+
+/// The status of a procedure call: committed or failed.
+///
+/// Sum type:
+/// - tag 0: Committed(DatabaseUpdate)
+/// - tag 1: Failed(String)
+sealed class ProcedureStatus {
+  const ProcedureStatus();
+
+  static ProcedureStatus readBsatn(BsatnDecoder decoder) {
+    final tag = decoder.readSumTag();
+    switch (tag) {
+      case 0:
+        final update = DatabaseUpdate.readBsatn(decoder);
+        return ProcedureCommitted(update);
+      case 1:
+        final errorMessage = decoder.readString();
+        return ProcedureFailed(errorMessage);
+      default:
+        throw BsatnDecodeException('Unknown ProcedureStatus tag: $tag');
+    }
+  }
+}
+
+/// Procedure was committed successfully with the given database changes.
+class ProcedureCommitted extends ProcedureStatus {
+  final DatabaseUpdate databaseUpdate;
+  const ProcedureCommitted(this.databaseUpdate);
+
+  @override
+  String toString() => 'ProcedureCommitted($databaseUpdate)';
+}
+
+/// Procedure failed with the given error message.
+class ProcedureFailed extends ProcedureStatus {
+  final String errorMessage;
+  const ProcedureFailed(this.errorMessage);
+
+  @override
+  String toString() => 'ProcedureFailed($errorMessage)';
 }

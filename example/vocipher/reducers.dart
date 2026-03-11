@@ -170,6 +170,26 @@ class RemoteReducers {
     _onReducer('send_message', callback);
   }
 
+  /// Calls the `set_roles` reducer.
+  Future<void> setRoles(int serverId, List<String> roleNames, List<int> permissions) {
+    final encoder = BsatnEncoder();
+    encoder.writeU64(serverId);
+    encoder.writeArrayHeader(roleNames.length);
+    for (final item in roleNames) {
+      encoder.writeString(item);
+    }
+    encoder.writeArrayHeader(permissions.length);
+    for (final item in permissions) {
+      encoder.writeU32(item);
+    }
+    return _callReducer('set_roles', encoder.toBytes());
+  }
+
+  /// Registers a callback for when `set_roles` completes.
+  void onSetRoles(ReducerCallback callback) {
+    _onReducer('set_roles', callback);
+  }
+
   /// Calls the `set_username` reducer.
   Future<void> setUsername(String username) {
     final encoder = BsatnEncoder();
@@ -180,6 +200,17 @@ class RemoteReducers {
   /// Registers a callback for when `set_username` completes.
   void onSetUsername(ReducerCallback callback) {
     _onReducer('set_username', callback);
+  }
+
+  /// Calls the `test_error` reducer.
+  Future<void> testError() {
+    final encoder = BsatnEncoder();
+    return _callReducer('test_error', encoder.toBytes());
+  }
+
+  /// Registers a callback for when `test_error` completes.
+  void onTestError(ReducerCallback callback) {
+    _onReducer('test_error', callback);
   }
 
   /// Calls the `toggle_deafen` reducer.
@@ -244,6 +275,36 @@ class RemoteReducers {
   /// Registers a callback for when `update_server` completes.
   void onUpdateServer(ReducerCallback callback) {
     _onReducer('update_server', callback);
+  }
+
+  /// Calls the `update_settings` reducer.
+  Future<void> updateSettings(String? theme, String? language, bool notifications, String? emoji) {
+    final encoder = BsatnEncoder();
+    if (theme != null) {
+      encoder.writeOptionSome();
+      encoder.writeString(theme);
+    } else {
+      encoder.writeOptionNone();
+    }
+    if (language != null) {
+      encoder.writeOptionSome();
+      encoder.writeString(language);
+    } else {
+      encoder.writeOptionNone();
+    }
+    encoder.writeBool(notifications);
+    if (emoji != null) {
+      encoder.writeOptionSome();
+      encoder.writeString(emoji);
+    } else {
+      encoder.writeOptionNone();
+    }
+    return _callReducer('update_settings', encoder.toBytes());
+  }
+
+  /// Registers a callback for when `update_settings` completes.
+  void onUpdateSettings(ReducerCallback callback) {
+    _onReducer('update_settings', callback);
   }
 
 }
