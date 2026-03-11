@@ -319,7 +319,7 @@ class DartGenerator {
             '$valueEncode\n'
             '$pad}';
       case OptionType():
-        final innerEncode = encodeExpr(type.innerType, '$varName!',
+        final innerEncode = encodeExpr(type.innerType, varName,
             indent: indent + 2);
         return '${pad}if ($varName != null) {\n'
             '$pad  encoder.writeOptionSome();\n'

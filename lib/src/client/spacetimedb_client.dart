@@ -298,6 +298,25 @@ class SpacetimeDbClient {
     _reducerCallbacks.putIfAbsent(reducerName, () => []).add(callback);
   }
 
+  /// Calls a named procedure with BSATN-encoded arguments.
+  ///
+  /// Procedures are similar to reducers but use the newer `CallProcedure`
+  /// message type (tag 7) and receive `ProcedureResult` responses.
+  /// The returned [Future] completes when the server confirms the call.
+  Future<void> callProcedure(String name, Uint8List args) {
+    final requestId = _nextRequestId++;
+    final completer = Completer<void>();
+    _pendingReducerCalls[requestId] = completer;
+
+    _connection.send(CallProcedure(
+      procedure: name,
+      args: args,
+      requestId: requestId,
+    ));
+
+    return completer.future;
+  }
+
   // ---- One-off queries ----
 
   /// Executes a one-off SQL query that is not tied to a subscription.

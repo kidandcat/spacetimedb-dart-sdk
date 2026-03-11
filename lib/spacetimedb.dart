@@ -23,3 +23,7 @@ export 'src/client/table_cache.dart';
 export 'src/client/subscription.dart';
 export 'src/client/connection.dart';
 export 'src/client/reconnect.dart';
+
+// Code generation
+export 'src/codegen/schema.dart';
+export 'src/codegen/generator.dart';
