@@ -17,7 +17,7 @@ class VocipherApp extends StatelessWidget {
       theme: DiscordTheme.dark(),
       home: Consumer<SpacetimeDbService>(
         builder: (context, service, _) {
-          if (service.isConnected) {
+          if (service.isConnected && service.setupComplete) {
             return const HomeScreen();
           }
           return const ConnectScreen();

@@ -42,6 +42,14 @@ class SpacetimeDbService extends ChangeNotifier {
   Token? _myToken;
   Token? get myToken => _myToken;
 
+  bool _setupComplete = false;
+  bool get setupComplete => _setupComplete;
+
+  void completeSetup() {
+    _setupComplete = true;
+    notifyListeners();
+  }
+
   // UI state
   int? _selectedServerId;
   int? get selectedServerId => _selectedServerId;
@@ -308,72 +316,75 @@ class SpacetimeDbService extends ChangeNotifier {
     }
   }
 
-  // Reducer wrappers
-  Future<void> sendMessage(String content) async {
+  // Reducer wrappers — fire-and-forget pattern.
+  // UI updates come from table cache callbacks, not from awaiting the Future.
+  void _fireReducer(Future<void> future) {
+    future.catchError((e) => debugPrint('Reducer error: $e'));
+  }
+
+  void sendMessage(String content) {
     if (_selectedChannelId == null) return;
-    await _reducers!.sendMessage(_selectedChannelId!, content);
+    _fireReducer(_reducers!.sendMessage(_selectedChannelId!, content));
   }
 
-  Future<void> sendDm(Identity receiver, String content) async {
-    await _reducers!.sendDirectMessage(receiver, content);
+  void sendDm(Identity receiver, String content) {
+    _fireReducer(_reducers!.sendDirectMessage(receiver, content));
   }
 
-  Future<void> createServer(String name) async {
-    await _reducers!.createServer(name, '');
+  void createServer(String name) {
+    _fireReducer(_reducers!.createServer(name, ''));
   }
 
-  Future<void> createChannel(
-      int serverId, String name, ChannelType type, String topic) async {
-    await _reducers!.createChannel(serverId, name, type, topic);
+  void createChannel(int serverId, String name, ChannelType type, String topic) {
+    _fireReducer(_reducers!.createChannel(serverId, name, type, topic));
   }
 
-  Future<void> joinServer(int serverId) async {
-    await _reducers!.joinServer(serverId);
+  void joinServer(int serverId) {
+    _fireReducer(_reducers!.joinServer(serverId));
   }
 
-  Future<void> leaveServer(int serverId) async {
-    await _reducers!.leaveServer(serverId);
+  void leaveServer(int serverId) {
+    _fireReducer(_reducers!.leaveServer(serverId));
   }
 
-  Future<void> setUsername(String username) async {
-    await _reducers!.setUsername(username);
+  void setUsername(String username) {
+    _fireReducer(_reducers!.setUsername(username));
   }
 
-  Future<void> updateProfile(
-      String displayName, String avatarUrl, String statusText) async {
-    await _reducers!.updateProfile(displayName, avatarUrl, statusText);
+  void updateProfile(String displayName, String avatarUrl, String statusText) {
+    _fireReducer(_reducers!.updateProfile(displayName, avatarUrl, statusText));
   }
 
-  Future<void> joinVoiceChannel(int channelId) async {
-    await _reducers!.joinVoiceChannel(channelId);
+  void joinVoiceChannel(int channelId) {
+    _fireReducer(_reducers!.joinVoiceChannel(channelId));
   }
 
-  Future<void> leaveVoiceChannel() async {
-    await _reducers!.leaveVoiceChannel();
+  void leaveVoiceChannel() {
+    _fireReducer(_reducers!.leaveVoiceChannel());
   }
 
-  Future<void> toggleMute() async {
-    await _reducers!.toggleMute();
+  void toggleMute() {
+    _fireReducer(_reducers!.toggleMute());
   }
 
-  Future<void> toggleDeafen() async {
-    await _reducers!.toggleDeafen();
+  void toggleDeafen() {
+    _fireReducer(_reducers!.toggleDeafen());
   }
 
-  Future<void> editMessage(int messageId, String content) async {
-    await _reducers!.editMessage(messageId, content);
+  void editMessage(int messageId, String content) {
+    _fireReducer(_reducers!.editMessage(messageId, content));
   }
 
-  Future<void> deleteMessage(int messageId) async {
-    await _reducers!.deleteMessage(messageId);
+  void deleteMessage(int messageId) {
+    _fireReducer(_reducers!.deleteMessage(messageId));
   }
 
-  Future<void> deleteChannel(int channelId) async {
-    await _reducers!.deleteChannel(channelId);
+  void deleteChannel(int channelId) {
+    _fireReducer(_reducers!.deleteChannel(channelId));
   }
 
-  Future<void> deleteServer(int serverId) async {
-    await _reducers!.deleteServer(serverId);
+  void deleteServer(int serverId) {
+    _fireReducer(_reducers!.deleteServer(serverId));
   }
 
   @override

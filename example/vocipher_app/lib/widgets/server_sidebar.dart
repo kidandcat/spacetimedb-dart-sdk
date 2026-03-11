@@ -69,39 +69,50 @@ class ServerSidebar extends StatelessWidget {
   void _showCreateServerDialog(
       BuildContext context, SpacetimeDbService service) {
     final controller = TextEditingController();
+    String? errorText;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create a Server'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Server name',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: DiscordColors.backgroundPrimary,
+          title: const Text('Create a Server'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: const TextStyle(color: DiscordColors.textNormal),
+                decoration: InputDecoration(
+                  hintText: 'Server name',
+                  errorText: errorText,
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    service.createServer(value.trim());
+                    Navigator.of(ctx).pop();
+                  }
+                },
+              ),
+            ],
           ),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              service.createServer(value.trim());
-              Navigator.of(ctx).pop();
-            }
-          },
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) {
+                  service.createServer(name);
+                  Navigator.of(ctx).pop();
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              if (name.isNotEmpty) {
-                service.createServer(name);
-                Navigator.of(ctx).pop();
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
   }

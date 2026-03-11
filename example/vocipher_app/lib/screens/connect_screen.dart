@@ -19,7 +19,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   bool _isConnecting = false;
   bool _showUsernameStep = false;
-  bool _isSettingUsername = false;
 
   @override
   void dispose() {
@@ -43,14 +42,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
     if (service.connectionError != null) {
       setState(() => _isConnecting = false);
     } else {
-      // Connection successful — check if user already has a username
-      // Wait briefly for identity and user data to arrive
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Connection successful — wait for subscriptions to apply
+      await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
 
       final currentUser = service.currentUser;
       if (currentUser != null && currentUser.username.isNotEmpty) {
-        // User already has a username, navigation handled by Consumer in app.dart
+        // User already has a username, go directly to home
+        service.completeSetup();
         return;
       }
 
@@ -61,20 +60,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
     }
   }
 
-  Future<void> _setUsername() async {
+  void _setUsername() {
     final username = _usernameController.text.trim();
     if (username.isEmpty) return;
 
     final service = context.read<SpacetimeDbService>();
-    setState(() => _isSettingUsername = true);
-
-    try {
-      await service.setUsername(username);
-      // Navigation handled automatically by the Consumer in app.dart
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSettingUsername = false);
-    }
+    service.setUsername(username);
+    service.completeSetup();
   }
 
   @override
@@ -321,7 +313,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
           ),
           TextField(
             controller: _usernameController,
-            enabled: !_isSettingUsername,
+            enabled: true,
             autofocus: true,
             style: const TextStyle(color: DiscordColors.textNormal),
             decoration: InputDecoration(
@@ -347,7 +339,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             width: double.infinity,
             height: 44,
             child: ElevatedButton(
-              onPressed: _isSettingUsername ? null : _setUsername,
+              onPressed: _setUsername,
               style: ElevatedButton.styleFrom(
                 backgroundColor: DiscordColors.blurple,
                 foregroundColor: Colors.white,
@@ -358,16 +350,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 ),
                 elevation: 0,
               ),
-              child: _isSettingUsername
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
+              child: const Text(
                       'Continue',
                       style: TextStyle(
                         fontSize: 16,
