@@ -100,6 +100,29 @@ void main() {
       expect(() => I128(BigInt.one << 127), throwsArgumentError);
       expect(() => I128(-(BigInt.one << 127) - BigInt.one), throwsArgumentError);
     });
+
+    test('fromInt', () {
+      final v = I128.fromInt(-100);
+      expect(v.value, BigInt.from(-100));
+    });
+
+    test('hashCode and toString', () {
+      final v = I128(BigInt.from(42));
+      expect(v.hashCode, BigInt.from(42).hashCode);
+      expect(v.toString(), '42');
+    });
+
+    test('compareTo', () {
+      final a = I128(BigInt.from(-10));
+      final b = I128(BigInt.from(10));
+      expect(a.compareTo(b), lessThan(0));
+      expect(b.compareTo(a), greaterThan(0));
+      expect(a.compareTo(a), 0);
+    });
+
+    test('fromLeBytes rejects wrong length', () {
+      expect(() => I128.fromLeBytes(Uint8List(15)), throwsArgumentError);
+    });
   });
 
   group('U256', () {
@@ -121,6 +144,24 @@ void main() {
 
     test('fromLeBytes rejects wrong length', () {
       expect(() => U256.fromLeBytes(Uint8List(31)), throwsArgumentError);
+    });
+
+    test('fromInt', () {
+      final v = U256.fromInt(999);
+      expect(v.value, BigInt.from(999));
+    });
+
+    test('hashCode and toString', () {
+      final v = U256(BigInt.from(255));
+      expect(v.hashCode, BigInt.from(255).hashCode);
+      expect(v.toString(), contains('ff'));
+    });
+
+    test('compareTo', () {
+      final a = U256(BigInt.from(1));
+      final b = U256(BigInt.from(2));
+      expect(a.compareTo(b), lessThan(0));
+      expect(b.compareTo(a), greaterThan(0));
     });
   });
 
@@ -145,6 +186,33 @@ void main() {
 
     test('rejects out of range', () {
       expect(() => I256(BigInt.one << 255), throwsArgumentError);
+    });
+
+    test('zero', () {
+      final v = I256.zero();
+      expect(v.value, BigInt.zero);
+    });
+
+    test('fromInt', () {
+      final v = I256.fromInt(-500);
+      expect(v.value, BigInt.from(-500));
+    });
+
+    test('fromLeBytes rejects wrong length', () {
+      expect(() => I256.fromLeBytes(Uint8List(31)), throwsArgumentError);
+    });
+
+    test('hashCode and toString', () {
+      final v = I256(BigInt.from(-42));
+      expect(v.hashCode, BigInt.from(-42).hashCode);
+      expect(v.toString(), '-42');
+    });
+
+    test('compareTo', () {
+      final a = I256(BigInt.from(-10));
+      final b = I256(BigInt.from(10));
+      expect(a.compareTo(b), lessThan(0));
+      expect(b.compareTo(a), greaterThan(0));
     });
   });
 
